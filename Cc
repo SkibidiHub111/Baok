@@ -53,6 +53,18 @@ local humanoid = char:WaitForChild("Humanoid")
 local Cash = player.leaderstats:WaitForChild("Cash")
 local PlotsFolder = workspace:FindFirstChild("Plots")
 
+-- Kiểm tra xem model có nằm trong plot của chính mình không
+local function isInPlayerPlot(model)
+	for _, plot in pairs(PlotsFolder:GetChildren()) do
+		local base = plot:FindFirstChild("YourBase", true)
+		if base and base:IsA("BoolValue") and base.Value == true and model:IsDescendantOf(plot) then
+			return true
+		end
+	end
+	return false
+end
+
+-- Tạo ESP box cho NPC
 local function addESP(model)
 	if model:FindFirstChild("ESP") then return end
 	local esp = Instance.new("BoxHandleAdornment")
@@ -66,12 +78,11 @@ local function addESP(model)
 	esp.Parent = model
 end
 
+-- Tìm NPC theo tên và bỏ qua nếu ở trong base của mình
 local function findNPC(name)
 	for _, model in ipairs(workspace:GetDescendants()) do
 		if model:IsA("Model") and model.Name == name then
-			if PlotsFolder and model:IsDescendantOf(PlotsFolder) then
-				continue
-			end
+			if isInPlayerPlot(model) then continue end
 			local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
 			if root then
 				return model, root
@@ -80,6 +91,7 @@ local function findNPC(name)
 	end
 end
 
+-- Đi đến NPC và giữ phím E để mua
 local function followAndHoldE(root, model)
 	addESP(model)
 
@@ -101,7 +113,7 @@ local function followAndHoldE(root, model)
 		end
 		humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
 	end)
-	
+
 	task.delay(6, function()
 		if conn then
 			holding = false
@@ -111,6 +123,7 @@ local function followAndHoldE(root, model)
 	end)
 end
 
+-- Auto mua khi có đủ tiền
 task.spawn(function()
 	while true do
 		local selectedValue = nil
@@ -260,7 +273,7 @@ RunService.RenderStepped:Connect(function()
     Humanoid = Character:FindFirstChild("Humanoid")
 
     if not currentTargetPlot then
-        -- Tìm plot gần nhất có "0s" hoặc "1s"
+   
         local closestPlot, closestDist, closestMain = nil, math.huge, nil
 
         for _, plot in pairs(plotsFolder:GetChildren()) do
@@ -283,7 +296,6 @@ RunService.RenderStepped:Connect(function()
             createESP(closestPlot, closestMain)
         end
     else
-        -- Chỉ xử lý lại plot đã chọn
         local purchases = currentTargetPlot:FindFirstChild("Purchases")
         local plotBlock = purchases and purchases:FindFirstChild("PlotBlock")
         local mainPart = plotBlock and plotBlock:FindFirstChild("Main")
