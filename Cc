@@ -45,28 +45,56 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
 
 repeat task.wait() until player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
 
-local Cash = player.leaderstats:WaitForChild("Cash")
 local humanoid = player.Character:WaitForChild("Humanoid")
-local PlotsFolder = workspace:FindFirstChild("Plots")
+local Cash = player.leaderstats:WaitForChild("Cash")
+local PlotsFolder = Workspace:FindFirstChild("Plots")
 local myName = player.Name
 
-local function isInPlot(model)
-	for _, plot in pairs(PlotsFolder:GetChildren()) do
-		if model:IsDescendantOf(plot) then
-			return true, plot
+-- ✅ Tìm baseText của bạn để kiểm tra base
+local function findBasePart()
+	local targetText = myName .. "'s Base"
+	for _, v in pairs(Workspace:GetDescendants()) do
+		if v:IsA("TextLabel") and v.Text == targetText then
+			return v:FindFirstAncestorWhichIsA("BasePart")
 		end
 	end
-	return false, nil
 end
 
+-- ✅ ESP Base
+local function addBaseESP(basePart)
+	local esp = Instance.new("BillboardGui")
+	esp.Name = "BaseESP"
+	esp.Size = UDim2.new(0, 180, 0, 30)
+	esp.StudsOffset = Vector3.new(0, 3, 0)
+	esp.AlwaysOnTop = true
+	esp.MaxDistance = 1000
+	esp.Adornee = basePart
+	esp.Parent = basePart
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.Text = "🏠 BASE CỦA BẠN"
+	textLabel.TextScaled = true
+	textLabel.Font = Enum.Font.GothamBold
+	textLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+	textLabel.Parent = esp
+end
+
+-- ✅ Check NPC nằm trong base mình chưa
 local function isInMyBase(model)
-	local _, plot = isInPlot(model)
-	return plot and plot.Name:lower():find(myName:lower())
+	local base = findBasePart()
+	if base and model:IsDescendantOf(base.Parent) then
+		return true
+	end
+	return false
 end
 
+-- ✅ ESP NPC
 local function createESP(model)
 	local esp = Instance.new("BoxHandleAdornment")
 	esp.Name = "ESP"
@@ -74,72 +102,60 @@ local function createESP(model)
 	esp.AlwaysOnTop = true
 	esp.ZIndex = 10
 	esp.Size = model:GetExtentsSize()
-	esp.Color3 = Color3.fromRGB(0, 255, 100)
-	esp.Transparency = 0.2
+	esp.Color3 = Color3.fromRGB(255, 255, 0)
+	esp.Transparency = 0.3
 	esp.Parent = model
-	task.delay(3, function()
+	task.delay(4, function()
 		if esp then esp:Destroy() end
 	end)
 end
 
-local function getClosestNPC(name)
-	local closest, minDist = nil, math.huge
-	for _, model in ipairs(workspace:GetDescendants()) do
-		if model:IsA("Model") and model.Name == name then
+-- ✅ Tìm NPC ở ngoài base
+local function findBuyableNPC(name)
+	for _, model in ipairs(Workspace:GetDescendants()) do
+		if model:IsA("Model") and model.Name == name and not isInMyBase(model) then
 			local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
-			if root and root:IsDescendantOf(workspace) and root.Position.Y < 50 then
-				local inPlot, plot = isInPlot(model)
-				if (not inPlot or not plot.Name:lower():find(myName:lower())) then
-					local dist = (player.Character.HumanoidRootPart.Position - root.Position).Magnitude
-					if dist < minDist then
-						closest = { model = model, root = root }
-						minDist = dist
-					end
-				end
+			if root and root:IsDescendantOf(Workspace) then
+				return model, root
 			end
 		end
 	end
-	return closest
 end
 
-local function followAndHoldE(npc)
-	local model, root = npc.model, npc.root
+-- ✅ Di chuyển và giữ phím E
+local function followAndHoldE(model, root)
 	createESP(model)
-
 	local moving = true
-	local move = RunService.Heartbeat:Connect(function()
+
+	local moveConn = RunService.Heartbeat:Connect(function()
 		if model and model.Parent and moving then
 			humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
 		end
 	end)
 
 	task.spawn(function()
-		while model and model.Parent and moving do
+		while moving and model and model.Parent and not isInMyBase(model) do
 			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
 			task.wait(0.1)
 		end
 		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-	end)
-
-	-- Auto timeout to stop follow
-	task.delay(5, function()
 		moving = false
-		if move then move:Disconnect() end
+		moveConn:Disconnect()
 	end)
 
-	-- Stop early if NPC disappears or enters your base
-	task.spawn(function()
-		while moving and model and model.Parent do
-			if isInMyBase(model) or not model:IsDescendantOf(workspace) then
-				moving = false
-				if move then move:Disconnect() end
-			end
-			task.wait(0.2)
-		end
+	task.delay(4, function()
+		moving = false
+		if moveConn then moveConn:Disconnect() end
 	end)
 end
 
--- AUTO MUA LIÊN TỤC
+-- ✅ Base ESP setup
+local myBasePart = findBasePart()
+if myBasePart then
+	addBaseESP(myBasePart)
+end
+
+-- ✅ Main AutoBuy
 task.spawn(function()
 	while true do
 		local selected = nil
@@ -152,15 +168,14 @@ task.spawn(function()
 		end
 
 		if selected then
-			local list = getgenv().Config.BuyIfMoney[selected].Brainrots
-			for _, pet in ipairs(list) do
+			for _, pet in ipairs(getgenv().Config.BuyIfMoney[selected].Brainrots) do
 				if Cash.Value >= (pet.Price or 0) then
-					local npc = getClosestNPC(pet.Name)
-					if npc then
+					local model, root = findBuyableNPC(pet.Name)
+					if model and root then
 						task.spawn(function()
-							followAndHoldE(npc)
+							followAndHoldE(model, root)
 						end)
-						task.wait(0.2) -- nhanh hơn
+						task.wait(0.2)
 					end
 				end
 			end
