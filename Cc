@@ -50,7 +50,6 @@ repeat task.wait() until player.Character and player.Character:FindFirstChild("H
 
 local char = player.Character
 local humanoid = char:WaitForChild("Humanoid")
-local rootPart = char:WaitForChild("HumanoidRootPart")
 local Cash = player.leaderstats:WaitForChild("Cash")
 local PlotsFolder = workspace:FindFirstChild("Plots")
 
@@ -79,27 +78,23 @@ local function addESP(model)
     currentESP = esp
 end
 
-local function findNearestNPC(nameList)
-    local nearest = nil
-    local nearestRoot = nil
-    local shortestDist = math.huge
-
+-- Ưu tiên tìm NPC gần nhất nếu có nhiều tên giống nhau
+local function findClosestNPC(name)
+    local closestModel, closestRoot = nil, nil
+    local shortestDistance = math.huge
     for _, model in ipairs(workspace:GetDescendants()) do
-        if model:IsA("Model") and table.find(nameList, model.Name) then
-            if isInAnyPlot(model) then continue end
+        if model:IsA("Model") and model.Name == name and not isInAnyPlot(model) then
             local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
             if root then
-                local dist = (rootPart.Position - root.Position).Magnitude
-                if dist < shortestDist then
-                    shortestDist = dist
-                    nearest = model
-                    nearestRoot = root
+                local distance = (char.HumanoidRootPart.Position - root.Position).Magnitude
+                if distance < shortestDistance then
+                    closestModel, closestRoot = model, root
+                    shortestDistance = distance
                 end
             end
         end
     end
-
-    return nearest, nearestRoot
+    return closestModel, closestRoot
 end
 
 local function followAndHoldE(root, model)
@@ -115,13 +110,19 @@ local function followAndHoldE(root, model)
     end)
 
     local conn
-    conn = RunService.Heartbeat:Connect(function()
+    conn = RunService.Stepped:Connect(function()
         if not model or not model.Parent then
             holding = false
             conn:Disconnect()
             return
         end
-        humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
+
+        local distance = (char.HumanoidRootPart.Position - root.Position).Magnitude
+        if distance > 3 then
+            humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
+        else
+            humanoid:MoveTo(char.HumanoidRootPart.Position) -- đứng yên nếu gần
+        end
     end)
 
     task.delay(4, function()
@@ -133,6 +134,7 @@ local function followAndHoldE(root, model)
     end)
 end
 
+-- Vòng lặp chính
 task.spawn(function()
     while true do
         local selectedValue = nil
@@ -148,7 +150,7 @@ task.spawn(function()
             local data = getgenv().Config.BuyIfMoney[selectedValue]
             for _, pet in ipairs(data.Brainrots) do
                 if Cash.Value >= (pet.Price or 0) then
-                    local model, root = findNearestNPC({ pet.Name })
+                    local model, root = findClosestNPC(pet.Name)
                     if model and root then
                         followAndHoldE(root, model)
                         repeat task.wait() until not model or not model.Parent
@@ -157,7 +159,7 @@ task.spawn(function()
                 end
             end
         else
-            task.wait(1)
+            task.wait(0.5)
         end
     end
 end)
