@@ -48,12 +48,11 @@ local player = Players.LocalPlayer
 
 repeat task.wait() until player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
 
-local char = player.Character
-local humanoid = char:WaitForChild("Humanoid")
 local Cash = player.leaderstats:WaitForChild("Cash")
+local humanoid = player.Character:WaitForChild("Humanoid")
 local PlotsFolder = workspace:FindFirstChild("Plots")
 
-local function isInBase(model)
+local function isInPlot(model)
     if not PlotsFolder then return false end
     for _, plot in pairs(PlotsFolder:GetChildren()) do
         if model:IsDescendantOf(plot) then
@@ -63,9 +62,7 @@ local function isInBase(model)
     return false
 end
 
-local currentESP = nil
-local function addESP(model)
-    if currentESP then currentESP:Destroy() end
+local function createESP(model)
     local esp = Instance.new("BoxHandleAdornment")
     esp.Name = "ESP"
     esp.Adornee = model
@@ -75,16 +72,15 @@ local function addESP(model)
     esp.Color3 = Color3.fromRGB(255, 200, 0)
     esp.Transparency = 0.3
     esp.Parent = model
-    currentESP = esp
+    task.delay(4, function() if esp then esp:Destroy() end end)
 end
 
-local function findClosestValidNPC(name)
-    local closest = nil
-    local minDist = math.huge
+local function getClosestNPC(name)
+    local closest, minDist = nil, math.huge
     for _, model in ipairs(workspace:GetDescendants()) do
-        if model:IsA("Model") and model.Name == name and not isInBase(model) then
+        if model:IsA("Model") and model.Name == name and not isInPlot(model) then
             local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
-            if root and root:IsDescendantOf(workspace) and root.Position.Y < 10 then -- tránh các con lơ lửng trong base
+            if root and root:IsDescendantOf(workspace) and root.Position.Y < 30 then
                 local dist = (player.Character.HumanoidRootPart.Position - root.Position).Magnitude
                 if dist < minDist then
                     closest = { model = model, root = root }
@@ -96,18 +92,18 @@ local function findClosestValidNPC(name)
     return closest
 end
 
-local function followAndHoldE(root, model)
-    addESP(model)
+local function followAndHoldE(npc)
+    local model, root = npc.model, npc.root
+    createESP(model)
     local holding = true
 
-    local moveThread = task.spawn(function()
-        while holding and model and model.Parent do
+    local move = RunService.Heartbeat:Connect(function()
+        if model and model.Parent and holding then
             humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
-            task.wait(0.15)
         end
     end)
 
-    local keyThread = task.spawn(function()
+    task.spawn(function()
         while holding and model and model.Parent do
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
             task.wait(0.1)
@@ -117,37 +113,40 @@ local function followAndHoldE(root, model)
 
     task.delay(5, function()
         holding = false
+        if move then move:Disconnect() end
     end)
 
-    repeat task.wait() until not model or not model.Parent or isInBase(model)
-    holding = false
+    repeat task.wait() until not model or not model.Parent or isInPlot(model)
 end
 
+-- ✅ CHẠY MUA LIÊN TIẾP NHIỀU CON CÙNG LÚC
 task.spawn(function()
     while true do
-        local selectedValue = nil
-        for moneyValue, data in pairs(getgenv().Config.BuyIfMoney) do
-            if data.Enable and Cash.Value >= moneyValue then
-                if not selectedValue or moneyValue > selectedValue then
-                    selectedValue = moneyValue
+        local selected = nil
+        for money, data in pairs(getgenv().Config.BuyIfMoney) do
+            if data.Enable and Cash.Value >= money then
+                if not selected or money > selected then
+                    selected = money
                 end
             end
         end
 
-        if selectedValue then
-            local data = getgenv().Config.BuyIfMoney[selectedValue]
-            for _, pet in ipairs(data.Brainrots) do
+        if selected then
+            local brainrots = getgenv().Config.BuyIfMoney[selected].Brainrots
+            for _, pet in ipairs(brainrots) do
                 if Cash.Value >= (pet.Price or 0) then
-                    local npc = findClosestValidNPC(pet.Name)
+                    local npc = getClosestNPC(pet.Name)
                     if npc then
-                        followAndHoldE(npc.root, npc.model)
-                        repeat task.wait() until not npc.model or not npc.model.Parent
-                        task.wait(0.2)
+                        task.spawn(function()
+                            followAndHoldE(npc)
+                        end)
+                        task.wait(0.5)
                     end
                 end
             end
+        else
+            task.wait(1)
         end
-        task.wait(0.5)
     end
 end)
 
