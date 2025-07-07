@@ -53,7 +53,7 @@ local humanoid = char:WaitForChild("Humanoid")
 local Cash = player.leaderstats:WaitForChild("Cash")
 local PlotsFolder = workspace:FindFirstChild("Plots")
 
-local function isInAnyPlot(model)
+local function isInBase(model)
     if not PlotsFolder then return false end
     for _, plot in pairs(PlotsFolder:GetChildren()) do
         if model:IsDescendantOf(plot) then
@@ -78,46 +78,48 @@ local function addESP(model)
     currentESP = esp
 end
 
-local function findNPC(name)
+local function findClosestValidNPC(name)
+    local closest = nil
+    local minDist = math.huge
     for _, model in ipairs(workspace:GetDescendants()) do
-        if model:IsA("Model") and model.Name == name and not isInAnyPlot(model) then
+        if model:IsA("Model") and model.Name == name and not isInBase(model) then
             local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
-            if root then
-                return model, root
+            if root and root:IsDescendantOf(workspace) and root.Position.Y < 10 then -- tránh các con lơ lửng trong base
+                local dist = (player.Character.HumanoidRootPart.Position - root.Position).Magnitude
+                if dist < minDist then
+                    closest = { model = model, root = root }
+                    minDist = dist
+                end
             end
         end
     end
+    return closest
 end
 
 local function followAndHoldE(root, model)
     addESP(model)
     local holding = true
 
-    local holdThread = task.spawn(function()
-        while holding and model and model.Parent and not isInAnyPlot(model) do
+    local moveThread = task.spawn(function()
+        while holding and model and model.Parent do
+            humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
+            task.wait(0.15)
+        end
+    end)
+
+    local keyThread = task.spawn(function()
+        while holding and model and model.Parent do
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
             task.wait(0.1)
         end
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
 
-    local moveThread = task.spawn(function()
-        while holding and model and model.Parent and not isInAnyPlot(model) do
-            if humanoid and humanoid.Health > 0 then
-                humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
-            end
-            task.wait(0.2)
-        end
-    end)
-
-    task.delay(6, function()
+    task.delay(5, function()
         holding = false
     end)
 
-    repeat
-        task.wait()
-    until not model or not model.Parent or isInAnyPlot(model) or not holding
-
+    repeat task.wait() until not model or not model.Parent or isInBase(model)
     holding = false
 end
 
@@ -136,17 +138,16 @@ task.spawn(function()
             local data = getgenv().Config.BuyIfMoney[selectedValue]
             for _, pet in ipairs(data.Brainrots) do
                 if Cash.Value >= (pet.Price or 0) then
-                    local model, root = findNPC(pet.Name)
-                    if model and root then
-                        followAndHoldE(root, model)
-                        repeat task.wait() until not model or not model.Parent or isInAnyPlot(model)
+                    local npc = findClosestValidNPC(pet.Name)
+                    if npc then
+                        followAndHoldE(npc.root, npc.model)
+                        repeat task.wait() until not npc.model or not npc.model.Parent
                         task.wait(0.2)
                     end
                 end
             end
-        else
-            task.wait(1)
         end
+        task.wait(0.5)
     end
 end)
 
