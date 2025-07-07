@@ -44,147 +44,122 @@ task.wait(30)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local Workspace = game:GetService("Workspace")
 local player = Players.LocalPlayer
 
 repeat task.wait() until player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
 
-local character = player.Character
-local humanoid = character:WaitForChild("Humanoid")
-local rootPart = character:WaitForChild("HumanoidRootPart")
-local cash = player.leaderstats:WaitForChild("Cash")
-local PlotsFolder = Workspace:FindFirstChild("Plots")
-
-local function addBaseESP()
-	for _, label in pairs(Workspace:GetDescendants()) do
-		if label:IsA("TextLabel") and label.Text:find("'s Base") then
-			local part = label:FindFirstAncestorWhichIsA("BasePart")
-			if part and not part:FindFirstChild("BaseESP") then
-				local esp = Instance.new("BillboardGui", part)
-				esp.Name = "BaseESP"
-				esp.Size = UDim2.new(0, 100, 0, 30)
-				esp.AlwaysOnTop = true
-				esp.Adornee = part
-				esp.StudsOffset = Vector3.new(0, 5, 0)
-
-				local txt = Instance.new("TextLabel", esp)
-				txt.Size = UDim2.new(1, 0, 1, 0)
-				txt.BackgroundTransparency = 1
-				txt.TextColor3 = Color3.fromRGB(255, 255, 255)
-				txt.TextStrokeTransparency = 0.5
-				txt.TextScaled = true
-				txt.Font = Enum.Font.GothamBold
-				txt.Text = label.Text
-			end
-		end
-	end
-end
+local char = player.Character
+local humanoid = char:WaitForChild("Humanoid")
+local rootPart = char:WaitForChild("HumanoidRootPart")
+local Cash = player.leaderstats:WaitForChild("Cash")
+local PlotsFolder = workspace:FindFirstChild("Plots")
 
 local function isInAnyPlot(model)
-	if not PlotsFolder then return false end
-	for _, plot in pairs(PlotsFolder:GetChildren()) do
-		if model:IsDescendantOf(plot) then
-			return true
-		end
-	end
-	return false
+    if not PlotsFolder then return false end
+    for _, plot in pairs(PlotsFolder:GetChildren()) do
+        if model:IsDescendantOf(plot) then
+            return true
+        end
+    end
+    return false
+end
+
+local currentESP = nil
+local function addESP(model)
+    if currentESP then currentESP:Destroy() end
+    local esp = Instance.new("BoxHandleAdornment")
+    esp.Name = "ESP"
+    esp.Adornee = model
+    esp.AlwaysOnTop = true
+    esp.ZIndex = 10
+    esp.Size = model:GetExtentsSize()
+    esp.Color3 = Color3.fromRGB(255, 200, 0)
+    esp.Transparency = 0.3
+    esp.Parent = model
+    currentESP = esp
 end
 
 local function findNearestNPC(nameList)
-	local nearest = nil
-	local nearestRoot = nil
-	local shortestDist = math.huge
+    local nearest = nil
+    local nearestRoot = nil
+    local shortestDist = math.huge
 
-	for _, model in ipairs(workspace:GetDescendants()) do
-		if model:IsA("Model") and table.find(nameList, model.Name) and not isInAnyPlot(model) then
-			local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
-			if root then
-				local dist = (rootPart.Position - root.Position).Magnitude
-				if dist < shortestDist then
-					shortestDist = dist
-					nearest = model
-					nearestRoot = root
-				end
-			end
-		end
-	end
+    for _, model in ipairs(workspace:GetDescendants()) do
+        if model:IsA("Model") and table.find(nameList, model.Name) then
+            if isInAnyPlot(model) then continue end
+            local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
+            if root then
+                local dist = (rootPart.Position - root.Position).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    nearest = model
+                    nearestRoot = root
+                end
+            end
+        end
+    end
 
-	return nearest, nearestRoot
+    return nearest, nearestRoot
 end
 
-local function goToNPCAndHoldE(root, model)
-	local holding = true
-	local done = false
+local function followAndHoldE(root, model)
+    addESP(model)
+    local holding = true
 
-	local holdThread = task.spawn(function()
-		while holding and not done do
-			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-			task.wait(0.1)
-		end
-		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-	end)
+    task.spawn(function()
+        while holding and model and model.Parent do
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            task.wait(0.1)
+        end
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
 
-	local moveConn
-	moveConn = RunService.Heartbeat:Connect(function()
-		if not model or not model.Parent then
-			holding = false
-			done = true
-			moveConn:Disconnect()
-			return
-		end
+    local conn
+    conn = RunService.Heartbeat:Connect(function()
+        if not model or not model.Parent then
+            holding = false
+            conn:Disconnect()
+            return
+        end
+        humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
+    end)
 
-		local distance = (rootPart.Position - root.Position).Magnitude
-		if distance > 7 then
-			humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
-			holding = false
-		else
-			holding = true
-		end
-	end)
-
-	task.delay(5, function()
-		if not done then
-			holding = false
-			done = true
-			if moveConn then moveConn:Disconnect() end
-		end
-	end)
-
-	repeat task.wait() until not model or not model.Parent or done
+    task.delay(4, function()
+        if conn then
+            holding = false
+            conn:Disconnect()
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+        end
+    end)
 end
 
 task.spawn(function()
-	addBaseESP()
+    while true do
+        local selectedValue = nil
+        for moneyValue, data in pairs(getgenv().Config.BuyIfMoney) do
+            if data.Enable and Cash.Value >= moneyValue then
+                if not selectedValue or moneyValue > selectedValue then
+                    selectedValue = moneyValue
+                end
+            end
+        end
 
-	while true do
-		local selectedTier = nil
-		for moneyValue, data in pairs(getgenv().Config.BuyIfMoney) do
-			if data.Enable and cash.Value >= moneyValue then
-				if not selectedTier or moneyValue > selectedTier then
-					selectedTier = moneyValue
-				end
-			end
-		end
-
-		if selectedTier then
-			local data = getgenv().Config.BuyIfMoney[selectedTier]
-			local petNames = {}
-			for _, pet in ipairs(data.Brainrots) do
-				if cash.Value >= (pet.Price or 0) then
-					table.insert(petNames, pet.Name)
-				end
-			end
-
-			local model, root = findNearestNPC(petNames)
-			if model and root then
-				goToNPCAndHoldE(root, model)
-			else
-				task.wait(0.2)
-			end
-		else
-			task.wait(1)
-		end
-	end
+        if selectedValue then
+            local data = getgenv().Config.BuyIfMoney[selectedValue]
+            for _, pet in ipairs(data.Brainrots) do
+                if Cash.Value >= (pet.Price or 0) then
+                    local model, root = findNearestNPC({ pet.Name })
+                    if model and root then
+                        followAndHoldE(root, model)
+                        repeat task.wait() until not model or not model.Parent
+                        task.wait(0.1)
+                    end
+                end
+            end
+        else
+            task.wait(1)
+        end
+    end
 end)
 
 local TeleportClaimCoins = false
