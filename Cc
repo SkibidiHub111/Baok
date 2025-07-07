@@ -51,103 +51,123 @@ repeat task.wait() until player.Character and player.Character:FindFirstChild("H
 local Cash = player.leaderstats:WaitForChild("Cash")
 local humanoid = player.Character:WaitForChild("Humanoid")
 local PlotsFolder = workspace:FindFirstChild("Plots")
+local myName = player.Name
 
 local function isInPlot(model)
-    if not PlotsFolder then return false end
-    for _, plot in pairs(PlotsFolder:GetChildren()) do
-        if model:IsDescendantOf(plot) then
-            return true
-        end
-    end
-    return false
+	for _, plot in pairs(PlotsFolder:GetChildren()) do
+		if model:IsDescendantOf(plot) then
+			return true, plot
+		end
+	end
+	return false, nil
+end
+
+local function isInMyBase(model)
+	local _, plot = isInPlot(model)
+	return plot and plot.Name:lower():find(myName:lower())
 end
 
 local function createESP(model)
-    local esp = Instance.new("BoxHandleAdornment")
-    esp.Name = "ESP"
-    esp.Adornee = model
-    esp.AlwaysOnTop = true
-    esp.ZIndex = 10
-    esp.Size = model:GetExtentsSize()
-    esp.Color3 = Color3.fromRGB(255, 200, 0)
-    esp.Transparency = 0.3
-    esp.Parent = model
-    task.delay(4, function() if esp then esp:Destroy() end end)
+	local esp = Instance.new("BoxHandleAdornment")
+	esp.Name = "ESP"
+	esp.Adornee = model
+	esp.AlwaysOnTop = true
+	esp.ZIndex = 10
+	esp.Size = model:GetExtentsSize()
+	esp.Color3 = Color3.fromRGB(0, 255, 100)
+	esp.Transparency = 0.2
+	esp.Parent = model
+	task.delay(3, function()
+		if esp then esp:Destroy() end
+	end)
 end
 
 local function getClosestNPC(name)
-    local closest, minDist = nil, math.huge
-    for _, model in ipairs(workspace:GetDescendants()) do
-        if model:IsA("Model") and model.Name == name and not isInPlot(model) then
-            local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
-            if root and root:IsDescendantOf(workspace) and root.Position.Y < 30 then
-                local dist = (player.Character.HumanoidRootPart.Position - root.Position).Magnitude
-                if dist < minDist then
-                    closest = { model = model, root = root }
-                    minDist = dist
-                end
-            end
-        end
-    end
-    return closest
+	local closest, minDist = nil, math.huge
+	for _, model in ipairs(workspace:GetDescendants()) do
+		if model:IsA("Model") and model.Name == name then
+			local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
+			if root and root:IsDescendantOf(workspace) and root.Position.Y < 50 then
+				local inPlot, plot = isInPlot(model)
+				if (not inPlot or not plot.Name:lower():find(myName:lower())) then
+					local dist = (player.Character.HumanoidRootPart.Position - root.Position).Magnitude
+					if dist < minDist then
+						closest = { model = model, root = root }
+						minDist = dist
+					end
+				end
+			end
+		end
+	end
+	return closest
 end
 
 local function followAndHoldE(npc)
-    local model, root = npc.model, npc.root
-    createESP(model)
-    local holding = true
+	local model, root = npc.model, npc.root
+	createESP(model)
 
-    local move = RunService.Heartbeat:Connect(function()
-        if model and model.Parent and holding then
-            humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
-        end
-    end)
+	local moving = true
+	local move = RunService.Heartbeat:Connect(function()
+		if model and model.Parent and moving then
+			humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
+		end
+	end)
 
-    task.spawn(function()
-        while holding and model and model.Parent do
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-            task.wait(0.1)
-        end
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-    end)
+	task.spawn(function()
+		while model and model.Parent and moving do
+			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+			task.wait(0.1)
+		end
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+	end)
 
-    task.delay(5, function()
-        holding = false
-        if move then move:Disconnect() end
-    end)
+	-- Auto timeout to stop follow
+	task.delay(5, function()
+		moving = false
+		if move then move:Disconnect() end
+	end)
 
-    repeat task.wait() until not model or not model.Parent or isInPlot(model)
+	-- Stop early if NPC disappears or enters your base
+	task.spawn(function()
+		while moving and model and model.Parent do
+			if isInMyBase(model) or not model:IsDescendantOf(workspace) then
+				moving = false
+				if move then move:Disconnect() end
+			end
+			task.wait(0.2)
+		end
+	end)
 end
 
--- ✅ CHẠY MUA LIÊN TIẾP NHIỀU CON CÙNG LÚC
+-- AUTO MUA LIÊN TỤC
 task.spawn(function()
-    while true do
-        local selected = nil
-        for money, data in pairs(getgenv().Config.BuyIfMoney) do
-            if data.Enable and Cash.Value >= money then
-                if not selected or money > selected then
-                    selected = money
-                end
-            end
-        end
+	while true do
+		local selected = nil
+		for money, data in pairs(getgenv().Config.BuyIfMoney) do
+			if data.Enable and Cash.Value >= money then
+				if not selected or money > selected then
+					selected = money
+				end
+			end
+		end
 
-        if selected then
-            local brainrots = getgenv().Config.BuyIfMoney[selected].Brainrots
-            for _, pet in ipairs(brainrots) do
-                if Cash.Value >= (pet.Price or 0) then
-                    local npc = getClosestNPC(pet.Name)
-                    if npc then
-                        task.spawn(function()
-                            followAndHoldE(npc)
-                        end)
-                        task.wait(0.5)
-                    end
-                end
-            end
-        else
-            task.wait(1)
-        end
-    end
+		if selected then
+			local list = getgenv().Config.BuyIfMoney[selected].Brainrots
+			for _, pet in ipairs(list) do
+				if Cash.Value >= (pet.Price or 0) then
+					local npc = getClosestNPC(pet.Name)
+					if npc then
+						task.spawn(function()
+							followAndHoldE(npc)
+						end)
+						task.wait(0.2) -- nhanh hơn
+					end
+				end
+			end
+		else
+			task.wait(1)
+		end
+	end
 end)
 
 local TeleportClaimCoins = false
