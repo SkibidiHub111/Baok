@@ -39,7 +39,8 @@ gameNameText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 gameNameText.TextStrokeTransparency = 0.5 
 gameNameText.Parent = logoContainer
 
-task.wait(10)
+task.wait(30)
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -168,7 +169,9 @@ local function AutoClaimCoins()
                             :WaitForChild("RE/PlotService/ClaimCoins")
                             :FireServer(i)
                     end)
+                    task.wait(0.2)
                 end
+                task.wait(1)
             end
         end)
     end
