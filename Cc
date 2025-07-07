@@ -1,1 +1,536 @@
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "GameLogoUI"
+screenGui.Parent = playerGui
+
+local logoContainer = Instance.new("Frame")
+logoContainer.Name = "LogoContainer"
+logoContainer.Size = UDim2.new(0.2, 0, 0.2, 0)
+logoContainer.Position = UDim2.new(0.5 - logoContainer.Size.X.Scale / 2, 0, 0.05, 0)
+logoContainer.BackgroundTransparency = 1 
+logoContainer.Parent = screenGui
+
+local uiListLayout = Instance.new("UIListLayout")
+uiListLayout.FillDirection = Enum.FillDirection.Vertical
+uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+uiListLayout.Padding = UDim.new(0, 5)
+uiListLayout.Parent = logoContainer
+
+local logoImage = Instance.new("ImageLabel")
+logoImage.Name = "GameLogo"
+logoImage.Size = UDim2.new(0.8, 0, 0.8, 0) 
+logoImage.Image = "rbxassetid://78163761481918" 
+logoImage.BackgroundTransparency = 1 
+logoImage.ScaleType = Enum.ScaleType.Fit 
+logoImage.Parent = logoContainer
+
+local gameNameText = Instance.new("TextLabel")
+gameNameText.Name = "GameName"
+gameNameText.Size = UDim2.new(1, 0, 0.2, 0) 
+gameNameText.BackgroundTransparency = 1
+gameNameText.Text = "Strawberry Cat Hub"
+gameNameText.Font = Enum.Font.SourceSansBold
+gameNameText.TextColor3 = Color3.fromRGB(255, 255, 255)
+gameNameText.TextScaled = true 
+gameNameText.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+gameNameText.TextStrokeTransparency = 0.5 
+gameNameText.Parent = logoContainer
+
+task.wait(30)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local player = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+
+repeat task.wait() until player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
+
+local humanoid = player.Character:WaitForChild("Humanoid")
+local Cash = player.leaderstats:WaitForChild("Cash")
+local PlotsFolder = Workspace:FindFirstChild("Plots")
+local myName = player.Name
+
+local function findBasePart()
+	local targetText = myName .. "'s Base"
+	for _, v in pairs(Workspace:GetDescendants()) do
+		if v:IsA("TextLabel") and v.Text == targetText then
+			return v:FindFirstAncestorWhichIsA("BasePart")
+		end
+	end
+end
+
+local function addBaseESP(basePart)
+	local esp = Instance.new("BillboardGui")
+	esp.Name = "BaseESP"
+	esp.Size = UDim2.new(0, 180, 0, 30)
+	esp.StudsOffset = Vector3.new(0, 3, 0)
+	esp.AlwaysOnTop = true
+	esp.MaxDistance = 1000
+	esp.Adornee = basePart
+	esp.Parent = basePart
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.Text = "Your Base"
+	textLabel.TextScaled = true
+	textLabel.Font = Enum.Font.GothamBold
+	textLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+	textLabel.Parent = esp
+end
+
+local function isInMyBase(model)
+	local base = findBasePart()
+	if base and model:IsDescendantOf(base.Parent) then
+		return true
+	end
+	return false
+end
+
+local function createESP(model)
+	local esp = Instance.new("BoxHandleAdornment")
+	esp.Name = "ESP"
+	esp.Adornee = model
+	esp.AlwaysOnTop = true
+	esp.ZIndex = 10
+	esp.Size = model:GetExtentsSize()
+	esp.Color3 = Color3.fromRGB(255, 255, 0)
+	esp.Transparency = 0.3
+	esp.Parent = model
+	task.delay(4, function()
+		if esp then esp:Destroy() end
+	end)
+end
+
+local function findBuyableNPC(name)
+	for _, model in ipairs(Workspace:GetDescendants()) do
+		if model:IsA("Model") and model.Name == name and not isInMyBase(model) then
+			local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
+			if root and root:IsDescendantOf(Workspace) then
+				return model, root
+			end
+		end
+	end
+end
+
+local function followAndHoldE(model, root)
+	createESP(model)
+	local moving = true
+
+	local moveConn = RunService.Heartbeat:Connect(function()
+		if model and model.Parent and moving then
+			humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
+		end
+	end)
+
+	task.spawn(function()
+		while moving and model and model.Parent and not isInMyBase(model) do
+			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+			task.wait(0.1)
+		end
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+		moving = false
+		moveConn:Disconnect()
+	end)
+
+	task.delay(4, function()
+		moving = false
+		if moveConn then moveConn:Disconnect() end
+	end)
+end
+
+local myBasePart = findBasePart()
+if myBasePart then
+	addBaseESP(myBasePart)
+end
+
+task.spawn(function()
+	while true do
+		local selected = nil
+		for money, data in pairs(getgenv().Config.BuyIfMoney) do
+			if data.Enable and Cash.Value >= money then
+				if not selected or money > selected then
+					selected = money
+				end
+			end
+		end
+
+		if selected then
+			for _, pet in ipairs(getgenv().Config.BuyIfMoney[selected].Brainrots) do
+				if Cash.Value >= (pet.Price or 0) then
+					local model, root = findBuyableNPC(pet.Name)
+					if model and root then
+						task.spawn(function()
+							followAndHoldE(model, root)
+						end)
+						task.wait(0.2)
+					end
+				end
+			end
+		else
+			task.wait(1)
+		end
+	end
+end)
+
+local TeleportClaimCoins = false
+local claimThread
+
+local function AutoClaimCoins()
+    if claimThread then
+        task.cancel(claimThread)
+        claimThread = nil
+    end
+
+    if TeleportClaimCoins then
+        claimThread = task.spawn(function()
+            while TeleportClaimCoins do
+                for i = 1, 10 do
+                    local args = { i }
+                    pcall(function()
+                        game:GetService("ReplicatedStorage")
+                            :WaitForChild("Packages")
+                            :WaitForChild("Net")
+                            :WaitForChild("RE/PlotService/ClaimCoins")
+                            :FireServer(unpack(args))
+                    end)
+                    task.wait()
+                end
+            end
+        end)
+    end
+end
+
+_G.AutoClaimCoins = true
+TeleportClaimCoins = _G.AutoClaimCoins
+AutoClaimCoins()
+
+if not getgenv().Config or not getgenv().Config["Base Lock"] then return end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Player = Players.LocalPlayer
+
+repeat task.wait() until Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+local Character = Player.Character
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+local plotsFolder = workspace:WaitForChild("Plots")
+local currentTargetPlot = nil
+local lteESP = nil
+local lastWalk = 0
+
+local function getDistance(a, b)
+    return (a.Position - b.Position).Magnitude
+end
+
+local function createESP(plot, mainPart)
+    if lteESP then lteESP:Destroy() end
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "PlotESP"
+    billboard.Size = UDim2.new(0, 180, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 5, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Adornee = mainPart
+    billboard.MaxDistance = 1000
+    billboard.Parent = plot
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundTransparency = 0.8
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    frame.BorderSizePixel = 0
+    frame.Parent = billboard
+
+    local label = Instance.new("TextLabel")
+    label.Name = "Label"
+    label.Size = UDim2.new(1, -10, 1, -10)
+    label.Position = UDim2.new(0, 5, 0, 5)
+    label.BackgroundTransparency = 1
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.TextStrokeTransparency = 0.5
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = "..."
+    label.Parent = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = frame
+
+    lteESP = billboard
+end
+
+RunService.RenderStepped:Connect(function()
+    if not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart") then return end
+    Character = Player.Character
+    RootPart = Character:FindFirstChild("HumanoidRootPart")
+    Humanoid = Character:FindFirstChild("Humanoid")
+
+    if not currentTargetPlot then
+   
+        local closestPlot, closestDist, closestMain = nil, math.huge, nil
+
+        for _, plot in pairs(plotsFolder:GetChildren()) do
+            local purchases = plot:FindFirstChild("Purchases")
+            local plotBlock = purchases and purchases:FindFirstChild("PlotBlock")
+            local mainPart = plotBlock and plotBlock:FindFirstChild("Main")
+            local gui = mainPart and mainPart:FindFirstChild("BillboardGui")
+            local timeLabel = gui and gui:FindFirstChild("RemainingTime")
+
+            if mainPart and timeLabel and (timeLabel.Text == "0s" or timeLabel.Text == "1s") then
+                local dist = getDistance(RootPart, mainPart)
+                if dist < closestDist then
+                    closestPlot, closestDist, closestMain = plot, dist, mainPart
+                end
+            end
+        end
+
+        if closestPlot and closestMain then
+            currentTargetPlot = closestPlot
+            createESP(closestPlot, closestMain)
+        end
+    else
+        local purchases = currentTargetPlot:FindFirstChild("Purchases")
+        local plotBlock = purchases and purchases:FindFirstChild("PlotBlock")
+        local mainPart = plotBlock and plotBlock:FindFirstChild("Main")
+        local gui = mainPart and mainPart:FindFirstChild("BillboardGui")
+        local timeLabel = gui and gui:FindFirstChild("RemainingTime")
+
+        if mainPart and timeLabel and lteESP then
+            local label = lteESP:FindFirstChild("Frame"):FindFirstChild("Label")
+            if label then
+                label.Text = timeLabel.Text
+                if timeLabel.Text == "0s" or timeLabel.Text == "1s" then
+                    local dist = getDistance(RootPart, mainPart)
+                    if dist > 10 and tick() - lastWalk >= 3 then
+                        lastWalk = tick()
+                        Humanoid:MoveTo(mainPart.Position)
+                    end
+                else
+                    label.Text = "Waiting: " .. timeLabel.Text
+                end
+            end
+        end
+    end
+end)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local player = Players.LocalPlayer
+
+repeat task.wait() until player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player:FindFirstChild("leaderstats") and player.leaderstats:FindFirstChild("Cash")
+local humanoid = player.Character:WaitForChild("Humanoid")
+local hrp = humanoid.Parent:WaitForChild("HumanoidRootPart")
+local cashValue = player.leaderstats:WaitForChild("Cash")
+
+local screenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+screenGui.Name = "BrainrotCashUI"
+local cashLabel = Instance.new("TextLabel", screenGui)
+cashLabel.Size = UDim2.new(0, 220, 0, 36)
+cashLabel.Position = UDim2.new(1, -230, 0, 20)
+cashLabel.BackgroundTransparency = 0.3
+cashLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+cashLabel.TextColor3 = Color3.fromRGB(0, 255, 127)
+cashLabel.Font = Enum.Font.GothamSemibold
+cashLabel.TextSize = 20
+cashLabel.Text = "Cash: loading..."
+
+task.spawn(function()
+    while true do
+        cashLabel.Text = "Cash: " .. tostring(cashValue.Value)
+        task.wait(1)
+    end
+end)
+
+local function addESP(model)
+    if model:FindFirstChild("ESP") then return end
+    local box = Instance.new("BoxHandleAdornment")
+    box.Name = "ESP"
+    box.Adornee = model
+    box.AlwaysOnTop = true
+    box.ZIndex = 10
+    box.Size = model:GetExtentsSize()
+    box.Color3 = Color3.fromRGB(255, 200, 0)
+    box.Transparency = 0.35
+    box.Parent = model
+end
+
+local function goToAndHoldE(model)
+    local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
+    if not root then return end
+
+    local holding = true
+    task.spawn(function()
+        while holding and model and model.Parent do
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            task.wait(0.2)
+        end
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+
+    local conn = RunService.Heartbeat:Connect(function()
+        if not model or not model.Parent then
+            holding = false
+            conn:Disconnect()
+            return
+        end
+        humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
+    end)
+
+    task.delay(5, function()
+        holding = false
+        conn:Disconnect()
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+end
+
+local function getSellableBrainrots()
+    local cash = cashValue.Value
+    local result = {}
+
+    for threshold, data in pairs(getgenv().Config.BrainrotsToSell) do
+        if cash >= threshold and data.Enable then
+            for _, name in ipairs(data.Brainrots) do
+                result[name] = true
+            end
+        end
+    end
+
+    return result
+end
+
+local function scanNearbyBrainrots()
+    local brainrotsAllowed = getSellableBrainrots()
+
+    for _, model in ipairs(workspace:GetChildren()) do
+        if model:IsA("Model") and brainrotsAllowed[model.Name] then
+            local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
+            if root and (root.Position - hrp.Position).Magnitude <= 30 then
+                addESP(model)
+                goToAndHoldE(model)
+                task.wait(5.5)
+            end
+        end
+    end
+end
+
+while true do
+    pcall(scanNearbyBrainrots)
+    task.wait(10)
+end
+
+--//Webhook
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local BrainrotRarity = {
+    ["Common"] = {
+        "Noobini Pizzanini", "Tim Cheese", "Lirili Larila"
+    },
+    ["Rare"] = {
+        "Fluriflura", "Svinina Bombardino", "Tung Tung Tung Sahur",
+        "Gangster Footera", "Boneca Ambalabu", "Capachino Assassino",
+        "Ta Ta Ta Ta Sahur", "Trulimero Trulicinea"
+    },
+    ["Legendary"] = {
+        "Bananita Dolphinita", "Brr Brr Patapim", "Burbaloni Loliloli",
+        "Chef Crabracadebra", "Frigo Camelo", "Bombardiro Crocodilo",
+        "Cocofanto Elefanto"
+    },
+    ["Mythic"] = {
+        "Tralalero Tralala", "La Grande Combinasion", "La Vacca Saturno Saturnita",
+        "Graipuss Medussi", "Los Tralaleritos"
+    }
+}
+
+local function getRarity(name)
+    for rarity, list in pairs(BrainrotRarity) do
+        if table.find(list, name) then
+            return rarity
+        end
+    end
+    return "Unknown"
+end
+
+local function getNearbyBrainrots()
+    local result = {}
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return result end
+
+    for _, model in ipairs(workspace:GetChildren()) do
+        if model:IsA("Model") and model:FindFirstChildWhichIsA("BasePart") then
+            local dist = (model:GetPivot().Position - hrp.Position).Magnitude
+            if dist <= 30 then
+                local name = model.Name
+                local rarity = getRarity(name)
+                table.insert(result, string.format("[%s] %s", rarity, name))
+            end
+        end
+    end
+
+    return result
+end
+
+local function hasRare(brainrotList)
+    for _, line in ipairs(brainrotList) do
+        if line:find("%[Rare%]") or line:find("%[Legendary%]") or line:find("%[Mythic%]") then
+            return true
+        end
+    end
+    return false
+end
+
+local function sendWebhook()
+    if not getgenv().Config or not getgenv().Config["Webhook"] or not getgenv().Config["Webhook"]["Enable"] then return end
+
+    local brainrotList = getNearbyBrainrots()
+    if #brainrotList == 0 then return end
+
+    local user = LocalPlayer.Name
+    local display = LocalPlayer.DisplayName or "Unknown"
+    local cash = LocalPlayer:FindFirstChild("leaderstats") and LocalPlayer.leaderstats:FindFirstChild("Cash")
+    cash = cash and cash.Value or 0
+
+    local ping = ""
+    if getgenv().Config["Webhook"]["PingEveryoneWhenRare"] and hasRare(brainrotList) then
+        ping = "@everyone\n"
+    end
+
+    local content = {
+        ["content"] = ping,
+        ["username"] = "Strawberry Cat Hub",
+        ["embeds"] = {{
+            ["title"] = "All Brainrot",
+            ["description"] = table.concat(brainrotList, "\n"),
+            ["fields"] = {
+                { ["name"] = "👤 Player", ["value"] = string.format("**%s** (%s)", display, user), ["inline"] = true },
+                { ["name"] = "💰 Cash", ["value"] = tostring(cash), ["inline"] = true }
+            },
+            ["color"] = 65280
+        }}
+    }
+
+    pcall(function()
+        request({
+            Url = getgenv().Config["Webhook"]["Url"],
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode(content)
+        })
+    end)
+end
+
+while true do
+    sendWebhook()
+    task.wait((getgenv().Config["Webhook"]["Delay"] or 1) * 60)
+end
