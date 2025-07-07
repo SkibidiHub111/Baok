@@ -93,7 +93,7 @@ local function followAndHoldE(root, model)
     addESP(model)
     local holding = true
 
-    task.spawn(function()
+    local holdThread = task.spawn(function()
         while holding and model and model.Parent and not isInAnyPlot(model) do
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
             task.wait(0.1)
@@ -101,23 +101,24 @@ local function followAndHoldE(root, model)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
 
-    local conn
-    conn = RunService.Heartbeat:Connect(function()
-        if not model or not model.Parent or isInAnyPlot(model) then
-            holding = false
-            conn:Disconnect()
-            return
+    local moveThread = task.spawn(function()
+        while holding and model and model.Parent and not isInAnyPlot(model) do
+            if humanoid and humanoid.Health > 0 then
+                humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
+            end
+            task.wait(0.2)
         end
-        humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
     end)
 
-    task.delay(4, function()
-        if conn then
-            holding = false
-            conn:Disconnect()
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-        end
+    task.delay(6, function()
+        holding = false
     end)
+
+    repeat
+        task.wait()
+    until not model or not model.Parent or isInAnyPlot(model) or not holding
+
+    holding = false
 end
 
 task.spawn(function()
