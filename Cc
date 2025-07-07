@@ -53,22 +53,19 @@ local humanoid = char:WaitForChild("Humanoid")
 local Cash = player.leaderstats:WaitForChild("Cash")
 local PlotsFolder = workspace:FindFirstChild("Plots")
 
-local function isInAnyPlot(instance)
+local function isInAnyPlot(model)
     if not PlotsFolder then return false end
     for _, plot in pairs(PlotsFolder:GetChildren()) do
-        if instance:IsDescendantOf(plot) then
+        if model:IsDescendantOf(plot) then
             return true
         end
     end
     return false
 end
 
+local currentESP = nil
 local function addESP(model)
-    for _, v in ipairs(model:GetChildren()) do
-        if v:IsA("BoxHandleAdornment") and v.Name == "ESP" then
-            v:Destroy()
-        end
-    end
+    if currentESP then currentESP:Destroy() end
     local esp = Instance.new("BoxHandleAdornment")
     esp.Name = "ESP"
     esp.Adornee = model
@@ -76,14 +73,14 @@ local function addESP(model)
     esp.ZIndex = 10
     esp.Size = model:GetExtentsSize()
     esp.Color3 = Color3.fromRGB(255, 200, 0)
-    esp.Transparency = 0.35
+    esp.Transparency = 0.3
     esp.Parent = model
+    currentESP = esp
 end
 
 local function findNPC(name)
     for _, model in ipairs(workspace:GetDescendants()) do
-        if model:IsA("Model") and model.Name == name then
-            if isInAnyPlot(model) then continue end
+        if model:IsA("Model") and model.Name == name and not isInAnyPlot(model) then
             local root = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
             if root then
                 return model, root
@@ -98,10 +95,11 @@ local function followAndHoldE(root, model)
     task.spawn(function()
         while holding and model and model.Parent do
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-            task.wait(0.2)
+            task.wait(0.1)
         end
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
+
     local conn
     conn = RunService.Heartbeat:Connect(function()
         if not model or not model.Parent then
@@ -111,7 +109,8 @@ local function followAndHoldE(root, model)
         end
         humanoid:MoveTo(root.Position + Vector3.new(0, 0, -2))
     end)
-    task.delay(6, function()
+
+    task.delay(4, function()
         if conn then
             holding = false
             conn:Disconnect()
@@ -130,6 +129,7 @@ task.spawn(function()
                 end
             end
         end
+
         if selectedValue then
             local data = getgenv().Config.BuyIfMoney[selectedValue]
             for _, pet in ipairs(data.Brainrots) do
@@ -138,7 +138,7 @@ task.spawn(function()
                     if model and root then
                         followAndHoldE(root, model)
                         repeat task.wait() until not model or not model.Parent
-                        task.wait(0.3)
+                        task.wait(0.2)
                     end
                 end
             end
@@ -148,8 +148,7 @@ task.spawn(function()
     end
 end)
 
-_G.Money = true
-
+local TeleportClaimCoins = false
 local claimThread
 
 local function AutoClaimCoins()
@@ -158,25 +157,27 @@ local function AutoClaimCoins()
         claimThread = nil
     end
 
-    if _G.Money then
+    if TeleportClaimCoins then
         claimThread = task.spawn(function()
-            while _G.Money do
+            while TeleportClaimCoins do
                 for i = 1, 10 do
+                    local args = { i }
                     pcall(function()
                         game:GetService("ReplicatedStorage")
                             :WaitForChild("Packages")
                             :WaitForChild("Net")
                             :WaitForChild("RE/PlotService/ClaimCoins")
-                            :FireServer(i)
+                            :FireServer(unpack(args))
                     end)
-                    task.wait(0.2)
+                    task.wait()
                 end
-                task.wait(1)
             end
         end)
     end
 end
 
+_G.AutoClaimCoins = true
+TeleportClaimCoins = _G.AutoClaimCoins
 AutoClaimCoins()
 
 if not getgenv().Config or not getgenv().Config["Base Lock"] then return end
